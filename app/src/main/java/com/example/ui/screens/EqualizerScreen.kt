@@ -90,6 +90,7 @@ import com.example.audio.TestAudioMode
 import com.example.data.model.PresetEntity
 import com.example.ui.EqualizerUiState
 import com.example.ui.EqualizerViewModel
+import com.example.ui.components.ActivePlaybackNotificationWindow
 import com.example.ui.components.EffectKnobCard
 import com.example.ui.components.FrequencyResponseCurve
 import com.example.ui.components.RealtimeAudioVisualizerHeader
@@ -205,7 +206,22 @@ fun EqualizerScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Active Playback Notification Window (Real-time spectrum & changeable equalizer effects)
+            ActivePlaybackNotificationWindow(
+                uiState = uiState,
+                presets = presets,
+                onTogglePlayback = { viewModel.toggleAuditionPlayback() },
+                onToggleMasterEq = { viewModel.setMasterEnabled(!uiState.isMasterEnabled) },
+                onApplyPreset = { viewModel.applyPreset(it) },
+                onCycleBass = { viewModel.cycleBassBoost() },
+                onCycleVirtualizer = { viewModel.cycleVirtualizer() },
+                onSkipPrevious = { viewModel.skipPreviousAuditionMode() },
+                onSkipNext = { viewModel.skipNextAuditionMode() }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Floating Audition Test Bar (Quick Access)
             AuditionFloatingBar(

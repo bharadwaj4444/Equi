@@ -5,6 +5,9 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audio.AudioSessionManager
+import com.example.audio.EqualizerActionBridge
+import com.example.audio.EqualizerNotificationAction
+import com.example.audio.EqualizerNotificationManager
 import com.example.audio.LowLatencyEngine
 import com.example.audio.TestAudioMode
 import com.example.data.db.AppDatabase
@@ -78,6 +81,9 @@ class EqualizerViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             presetRepository.initializeDefaultPresetsIfEmpty()
         }
+
+        // Initialize Android notification channel for playback window
+        EqualizerNotificationManager.createNotificationChannel(application)
     }
 
     val allPresets: StateFlow<List<PresetEntity>> = presetRepository.allPresets
@@ -144,10 +150,44 @@ class EqualizerViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-        // Collect LowLatency Engine playback state
+        // Collect LowLatency Engine playback state and update notification window
         viewModelScope.launch {
             lowLatencyEngine.isPlaying.collect { isPlaying ->
                 _uiState.value = _uiState.value.copy(isAuditionPlaying = isPlaying)
+                if (isPlaying) {
+                    updateNotification()
+                } else {
+                    EqualizerNotificationManager.dismissNotification(application)
+                }
+            }
+        }
+
+        // Listen for actions dispatched from the Android Notification Window
+        viewModelScope.launch {
+            EqualizerActionBridge.actions.collect { action ->
+                when (action) {
+                    EqualizerNotificationAction.TOGGLE_EQ -> {
+                        setMasterEnabled(!_uiState.value.isMasterEnabled)
+                    }
+                    EqualizerNotificationAction.NEXT_PRESET -> {
+                        cycleNextPreset()
+                    }
+                    EqualizerNotificationAction.CYCLE_BASS -> {
+                        cycleBassBoost()
+                    }
+                    EqualizerNotificationAction.CYCLE_VIRTUALIZER -> {
+                        cycleVirtualizer()
+                    }
+                    EqualizerNotificationAction.TOGGLE_PLAY -> {
+                        toggleAuditionPlayback()
+                    }
+                    EqualizerNotificationAction.STOP -> {
+                        if (_uiState.value.isAuditionPlaying) {
+                            toggleAuditionPlayback()
+                        }
+                        EqualizerNotificationManager.dismissNotification(application)
+                    }
+                }
             }
         }
 
@@ -210,6 +250,7 @@ class EqualizerViewModel(application: Application) : AndroidViewModel(applicatio
     fun setMasterEnabled(enabled: Boolean) {
         audioSessionManager.setMasterEnabled(enabled)
         _uiState.value = _uiState.value.copy(isMasterEnabled = enabled)
+        updateNotification()
     }
 
     fun setBandLevelDb(index: Short, db: Float) {
@@ -317,6 +358,7 @@ class EqualizerViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.value = _uiState.value.copy(
             selectedPresetName = preset.name
         )
+        updateNotification()
     }
 
     fun saveCustomPreset(name: String) {
@@ -388,8 +430,56 @@ class EqualizerViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.value = _uiState.value.copy(activeSessionName = "Audition Auditing (Global Mix)")
     }
 
+    fun cycleNextPreset() {
+        val presetList = allPresets.value
+        if (presetList.isNotEmpty()) {
+            val currentIndex = presetList.indexOfFirst { it.name == _uiState.value.selectedPresetName }
+            val nextIndex = if (currentIndex in presetList.indices) (currentIndex + 1) % presetList.size else 0
+            applyPreset(presetList[nextIndex])
+        }
+    }
+
+    fun cycleBassBoost() {
+        val current = _uiState.value.bassBoostPercent
+        val next = when {
+            current < 15f -> 30f
+            current < 45f -> 60f
+            current < 80f -> 100f
+            else -> 0f
+        }
+        setBassBoost(next)
+        updateNotification()
+    }
+
+    fun cycleVirtualizer() {
+        val current = _uiState.value.virtualizerPercent
+        val next = when {
+            current < 20f -> 50f
+            current < 75f -> 100f
+            else -> 0f
+        }
+        setVirtualizer(next)
+        updateNotification()
+    }
+
+    fun updateNotification() {
+        val state = _uiState.value
+        if (state.isAuditionPlaying) {
+            EqualizerNotificationManager.showOrUpdateNotification(
+                context = getApplication(),
+                isPlaying = state.isAuditionPlaying,
+                presetName = state.selectedPresetName,
+                isEqEnabled = state.isMasterEnabled,
+                bassPercent = state.bassBoostPercent,
+                amplitudes = state.visualizerAmplitudes,
+                modeName = state.auditionMode.name
+            )
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
+        EqualizerNotificationManager.dismissNotification(getApplication())
         lowLatencyEngine.release()
         audioSessionManager.releaseEffects()
     }

@@ -24,18 +24,31 @@ class MainActivity : ComponentActivity() {
     enableEdgeToEdge()
     setContent {
       MyApplicationTheme {
-        // Request RECORD_AUDIO permission for hardware spectrum capture if needed
-        val permissionLauncher = rememberLauncherForActivityResult(
-          contract = ActivityResultContracts.RequestPermission()
+        // Request RECORD_AUDIO and POST_NOTIFICATIONS permissions gracefully
+        val permissionsLauncher = rememberLauncherForActivityResult(
+          contract = ActivityResultContracts.RequestMultiplePermissions()
         ) { /* Granted or denied gracefully */ }
 
         LaunchedEffect(Unit) {
+          val neededPermissions = mutableListOf<String>()
           if (ContextCompat.checkSelfPermission(
               this@MainActivity,
               Manifest.permission.RECORD_AUDIO
             ) != PackageManager.PERMISSION_GRANTED
           ) {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            neededPermissions.add(Manifest.permission.RECORD_AUDIO)
+          }
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                this@MainActivity,
+                Manifest.permission.POST_NOTIFICATIONS
+              ) != PackageManager.PERMISSION_GRANTED
+            ) {
+              neededPermissions.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+          }
+          if (neededPermissions.isNotEmpty()) {
+            permissionsLauncher.launch(neededPermissions.toTypedArray())
           }
         }
 
