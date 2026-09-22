@@ -1,0 +1,6 @@
+{
+  "name": "Equalizer",
+  "description": "Professional audio equalizer application with presets, custom frequency sliders, low-latency audio output, and system-wide audio effect integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
